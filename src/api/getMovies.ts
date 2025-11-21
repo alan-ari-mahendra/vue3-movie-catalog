@@ -4,16 +4,17 @@ import apiEndpoints from '../utils/apiEndpoints'
 import { getRestApiUrl } from '../utils/config'
 import type { QueryConfig } from '../utils/vue-query'
 import type { MoviesResponse } from '../types/movies.types'
+import { ref, type Ref } from 'vue'
 
 
 
 export const getMovies = async ({
-  page = 1,
+  page = ref(1),
 }: {
-  page?: number
+  page?: Ref<number, number>
 }) => {
   const params = {
-    page: page.toString(),
+    page: page.value,
   }
 
   const response = await api.get<MoviesResponse>(
@@ -27,15 +28,15 @@ export const getMovies = async ({
 }
 
 export const getMoviesQueryKey = ({
-  page = 1,
+  page = ref(1),
 }: {
-  page?: number
+  page?: Ref<number, number>
 }) => ['movies', { page }]
 
 export const getMoviesQueryOptions = ({
-  page = 1,
+  page = ref(1),
 }: {
-  page?: number
+  page?: Ref<number, number>
 }) => {
   return queryOptions({
     queryKey: getMoviesQueryKey({ page}),
@@ -45,12 +46,12 @@ export const getMoviesQueryOptions = ({
 
 type UseGetMoviesParams = {
   queryConfig?: QueryConfig<typeof getMovies>
-  page?: number
+  page?: Ref<number, number>
 }
 
 export const useGetMovies = ({
   queryConfig,
-  page = 1,
+  page = ref(1),
 }: UseGetMoviesParams = {}) => {
   return useQuery({
     ...getMoviesQueryOptions({ page }),

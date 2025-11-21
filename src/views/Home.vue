@@ -1,7 +1,12 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import { useGetMovies } from '../api/getMovies'
 
-const { data: movies, isLoading } = useGetMovies()
+const page = ref(1)
+
+const { data: movies, isLoading } = useGetMovies({
+  page: computed(() => page.value),
+})
 </script>
 
 <template>
@@ -38,10 +43,22 @@ const { data: movies, isLoading } = useGetMovies()
           </v-col>
         </v-row>
 
+        <!-- Pagination -->
+        <v-pagination
+          v-if="movies"
+          v-model="page"
+          :length="movies.total_pages"
+          :total-visible="7"
+          class="mt-8"
+          rounded="circle"
+          color="primary"
+        />
+        
       </v-container>
     </v-main>
   </v-app>
 </template>
+
 
 <style scoped lang="scss">
 .movie-container {
@@ -87,5 +104,12 @@ const { data: movies, isLoading } = useGetMovies()
     margin-top: 4px;
     font-size: 15px;
   }
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+  margin-bottom: 20px;
 }
 </style>
