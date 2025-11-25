@@ -201,14 +201,3 @@ The application uses SCSS for styling with:
 ## Deployment
 
 The application is deployed in vercel https://vue3-movie-catalog.vercel.app/
-
-## Future Improvements
-
-- Implement actual video playback functionality.
-- Add user authentication and personalized profiles.
-- Include movie trailers in the detail modal.
-- Implement more advanced filtering and sorting options.
-- Add a movie recommendation system based on user favorites.
-- Implement a watch history feature.
-- Enhance error boundaries for more robust error handling.
-- Add more comprehensive unit and integration tests.
