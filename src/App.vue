@@ -2,7 +2,7 @@
 import AppNavbar from './components/AppNavbar.vue'
 import AppFooter from './components/AppFooter.vue'
 import { VueQueryDevtools } from '@tanstack/vue-query-devtools'
-const isDev = import.meta.env.DEV
+const isDev = import.meta.env
 </script>
 
 <template>
