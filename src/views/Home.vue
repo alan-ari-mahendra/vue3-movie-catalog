@@ -3,34 +3,51 @@ import { ref, computed, watch, onMounted } from "vue";
 import { useGetMovies } from "../api/getMovies";
 import { Star, Heart, Play } from "lucide-vue-next";
 import MovieDetailModal from "../components/MovieDetailModal.vue";
+import VideoPlayerModal from "../components/VideoPlayerModal.vue";
 import { useFavorites } from "../hooks/useFavorites";
 
-const page = ref(1);
+interface BaseMovie {
+  imdbID: string;
+  Title: string;
+  Year: number | string;
+  Poster?: string;
+}
+
+interface EnrichedMovie extends BaseMovie {
+  rating: number;
+  description: string;
+  duration: string;
+  cast: string[];
+  genres: string[];
+}
+
+const page = ref<number>(1);
 const totalPages = ref<number | null>(null);
 
 const { data: movies, isLoading } = useGetMovies({
   page: computed(() => page.value),
 });
 
-const allMovies = ref([]);
-const lastLoadedPage = ref(0);
+const allMovies = ref<EnrichedMovie[]>([]);
+const lastLoadedPage = ref<number>(0);
 const isFirstLoading = computed(() => isLoading.value && page.value === 1);
 
 const loadedImages = ref<Record<string, boolean>>({});
-const isBannerLoaded = ref(false);
+const isBannerLoaded = ref<boolean>(false);
 
-const loadLimit = 50;
-const loadedCount = ref(0);
-const showLoadMore = ref(false);
+const loadLimit: number = 50;
+const loadedCount = ref<number>(0);
+const showLoadMore = ref<boolean>(false);
 
 const hoveredMovieId = ref<string | null>(null);
-const selectedMovie = ref(null);
-const showModal = ref(false);
-const heroBanner = ref(null);
+const selectedMovie = ref<EnrichedMovie | null>(null);
+const showModal = ref<boolean>(false);
+const showVideoPlayer = ref<boolean>(false);
+const heroBanner = ref<EnrichedMovie | null>(null);
 
 const { isFavorite, toggleFavorite } = useFavorites();
 
-const generateMockMovie = (movie) => ({
+const generateMockMovie = (movie: BaseMovie): EnrichedMovie => ({
   ...movie,
   rating: 7.4,
   description:
@@ -62,7 +79,7 @@ watch(movies, () => {
   const incoming = movies.value.data;
   const appendData = incoming.slice(0, remaining);
 
-  allMovies.value.push(...appendData);
+  allMovies.value.push(...appendData.map(generateMockMovie));
   loadedCount.value += appendData.length;
 
   if (loadedCount.value >= loadLimit) {
@@ -70,7 +87,7 @@ watch(movies, () => {
   }
 
   if (allMovies.value.length > 0 && !heroBanner.value) {
-    heroBanner.value = generateMockMovie(allMovies.value[0]);
+    heroBanner.value = allMovies.value[0] ?? null;
   }
 });
 
@@ -79,7 +96,7 @@ const sentinel = ref<HTMLElement | null>(null);
 onMounted(() => {
   let isWaiting = false;
 
-  const checkAndLoad = () => {
+  const checkAndLoad = (): boolean => {
     if (isLoading.value) return false;
     if (isWaiting) return false;
     if (showLoadMore.value) return false;
@@ -96,8 +113,8 @@ onMounted(() => {
   };
 
   const observer = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting) {
+    (entries: IntersectionObserverEntry[]) => {
+      if (entries[0] && entries[0].isIntersecting) {
         checkAndLoad();
       }
     },
@@ -109,7 +126,7 @@ onMounted(() => {
 
   if (sentinel.value) observer.observe(sentinel.value);
 
-  const handleScroll = () => {
+  const handleScroll = (): void => {
     const scrollTop = window.scrollY || document.documentElement.scrollTop;
     const scrollHeight = document.documentElement.scrollHeight;
     const clientHeight = document.documentElement.clientHeight;
@@ -129,36 +146,44 @@ onMounted(() => {
   };
 });
 
-const handleLoadMore = () => {
+const handleLoadMore = (): void => {
   showLoadMore.value = false;
   loadedCount.value = 0;
   page.value += 1;
 };
 
-const handleBannerLoaded = () => {
+const handleBannerLoaded = (): void => {
   isBannerLoaded.value = true;
 };
 
-const handleImageLoaded = (id: string) => {
+const handleImageLoaded = (id: string): void => {
   loadedImages.value[id] = true;
 };
 
-const handleMovieClick = (movie) => {
-  const mockData = generateMockMovie(movie);
-  selectedMovie.value = mockData;
+const handleMovieClick = (movie: EnrichedMovie): void => {
+  selectedMovie.value = movie;
   showModal.value = true;
-  heroBanner.value = mockData;
+  heroBanner.value = movie;
 };
 
-const handleToggleFavorite = (movieId: string, event: Event) => {
+const handleToggleFavorite = (movieId: string, event: Event): void => {
   event.stopPropagation();
   toggleFavorite(movieId);
+};
+
+const handlePlayBanner = (): void => {
+  if (heroBanner.value) {
+    showVideoPlayer.value = true;
+  }
+};
+
+const handleBackFromPlayer = (): void => {
+  showVideoPlayer.value = false;
 };
 </script>
 
 <template>
   <div class="home">
-    <!-- HERO SKELETON -->
     <section v-if="isFirstLoading" class="hero hero-skeleton">
       <div class="hero-skeleton-bg"></div>
 
@@ -172,7 +197,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       </div>
     </section>
 
-    <!-- HERO -->
     <section class="hero" v-if="heroBanner">
       <div v-if="!isBannerLoaded" class="hero-skeleton-bg"></div>
 
@@ -189,22 +213,20 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
         <p class="hero__desc">{{ heroBanner.description }}</p>
 
         <div class="hero__buttons">
-          <v-btn color="white" class="btn-play">
+          <v-btn color="white" class="btn-play" @click="handlePlayBanner">
             <Play :size="20" :fill="'black'" />
             Play
           </v-btn>
 
-          <v-btn color="grey-darken-4" class="btn-more">
+          <v-btn
+            color="grey-darken-4"
+            class="btn-more"
+            @click="handleToggleFavorite(heroBanner.imdbID, $event)"
+          >
             <Heart
               :size="20"
-              :fill="
-                heroBanner && isFavorite(heroBanner.imdbID) ? '#ef4444' : 'none'
-              "
-              :color="
-                heroBanner && isFavorite(heroBanner.imdbID)
-                  ? '#ef4444'
-                  : 'white'
-              "
+              :fill="isFavorite(heroBanner.imdbID) ? '#ef4444' : 'none'"
+              :color="isFavorite(heroBanner.imdbID) ? '#ef4444' : 'white'"
             />
             My List
           </v-btn>
@@ -214,17 +236,14 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       <div class="hero__fade"></div>
     </section>
 
-    <!-- MOVIE GRID -->
     <section class="movie-grid">
       <h2 class="grid-title">Popular Movies</h2>
 
       <div class="grid-list">
-        <!-- Skeleton -->
         <template v-if="isFirstLoading">
           <div v-for="n in 10" :key="'sk' + n" class="grid-item sk-item"></div>
         </template>
 
-        <!-- Real items -->
         <template v-else>
           <div
             v-for="movie in allMovies"
@@ -234,7 +253,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
             @mouseleave="hoveredMovieId = null"
             @click="handleMovieClick(movie)"
           >
-            <!-- skeleton -->
             <div v-if="!loadedImages[movie.imdbID]" class="img-skeleton"></div>
 
             <img
@@ -244,7 +262,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
               :class="{ hidden: !loadedImages[movie.imdbID] }"
             />
 
-            <!-- Hover Overlay -->
             <div
               class="movie-overlay"
               :class="{ visible: hoveredMovieId === movie.imdbID }"
@@ -254,7 +271,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
                 <div class="movie-meta">
                   <div class="rating">
                     <Star :size="16" :fill="'#ffd700'" color="#ffd700" />
-                    <span>{{ generateMockMovie(movie).rating }}</span>
+                    <span>{{ movie.rating }}</span>
                   </div>
                   <span class="year">{{ movie.Year }}</span>
                 </div>
@@ -276,12 +293,10 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       </div>
     </section>
 
-    <!-- Below loading spinner -->
     <div v-if="isLoading && page > 1" class="loading">
       <v-progress-circular indeterminate color="primary" size="50" />
     </div>
 
-    <!-- LOAD MORE BUTTON -->
     <div v-if="showLoadMore" class="load-more-container">
       <v-btn color="primary" size="large" @click="handleLoadMore">
         Load More
@@ -290,8 +305,13 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
 
     <div ref="sentinel" style="height: 20px; margin-bottom: 40px"></div>
 
-    <!-- MODAL COMPONENT -->
     <MovieDetailModal v-model="showModal" :movie="selectedMovie" />
+
+    <VideoPlayerModal
+      v-model="showVideoPlayer"
+      :movie="heroBanner"
+      @back="handleBackFromPlayer"
+    />
   </div>
 </template>
 

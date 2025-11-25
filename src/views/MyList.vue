@@ -1,74 +1,107 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  type Ref,
+  type ComputedRef,
+} from "vue";
 import { Star, Heart, Play } from "lucide-vue-next";
 import MovieDetailModal from "../components/MovieDetailModal.vue";
+import VideoPlayerModal from "../components/VideoPlayerModal.vue";
 import { useFavorites } from "../hooks/useFavorites";
+
+interface BaseMovie {
+  imdbID: string;
+  Title: string;
+  Year: number | string;
+  Poster?: string;
+}
+
+interface EnrichedMovie extends BaseMovie {
+  rating: number;
+  description: string;
+  duration: string;
+  cast: string[];
+  genres: string[];
+}
 
 const { allFavoriteIds, isFavorite, toggleFavorite } = useFavorites();
 
-const allMovies = ref([]);
-const displayedMovies = ref([]);
-const page = ref(1);
-const itemsPerPage = 20;
+const allMovies = ref<EnrichedMovie[]>([]);
+const displayedMovies = ref<EnrichedMovie[]>([]);
+const page = ref<number>(1);
+const itemsPerPage: number = 20;
 const hoveredMovieId = ref<string | null>(null);
-const selectedMovie = ref(null);
-const showModal = ref(false);
-const heroBanner = ref(null);
-const isLoading = ref(false);
+const selectedMovie = ref<EnrichedMovie | null>(null);
+const showModal = ref<boolean>(false);
+const showVideoPlayer = ref<boolean>(false);
+const heroBanner = ref<EnrichedMovie | null>(null);
+const isLoading = ref<boolean>(false);
 const loadedImages = ref<Record<string, boolean>>({});
-const isBannerLoaded = ref(false);
+const isBannerLoaded = ref<boolean>(false);
 
-const isFirstLoading = computed(
+const isFirstLoading: ComputedRef<boolean> = computed(
   () => allMovies.value.length === 0 && isLoading.value
 );
-const hasMore = computed(
+
+const hasMore: ComputedRef<boolean> = computed(
   () => displayedMovies.value.length < allMovies.value.length
 );
 
-const generateMockMovie = (movieId: string) => ({
-  imdbID: movieId,
-  Title: [
+const generateMockMovie = (movieId: string): EnrichedMovie => {
+  const titles: string[] = [
     "Inception",
     "The Dark Knight",
     "Interstellar",
     "Pulp Fiction",
     "The Matrix",
     "Fight Club",
-  ][Math.floor(Math.random() * 6)],
-  Year: 1990 + Math.floor(Math.random() * 30),
-  rating: (7 + Math.random() * 2.5).toFixed(1),
-  description:
-    "A mind-bending thriller that explores the depths of human consciousness and reality. An epic journey through time and space that will leave you questioning everything.",
-  duration: "2h 28m",
-  cast: [
-    "Leonardo DiCaprio",
-    "Tom Hardy",
-    "Ellen Page",
-    "Joseph Gordon-Levitt",
-  ],
-  genres: ["Action", "Sci-Fi", "Thriller"],
-});
+  ];
 
-const loadFavoriteMovies = () => {
+  return {
+    imdbID: movieId,
+    Title: titles[Math.floor(Math.random() * titles.length)] ?? "",
+    Year: 1990 + Math.floor(Math.random() * 30),
+    rating: parseFloat((7 + Math.random() * 2.5).toFixed(1)),
+    description:
+      "A mind-bending thriller that explores the depths of human consciousness and reality. An epic journey through time and space that will leave you questioning everything.",
+    duration: "2h 28m",
+    cast: [
+      "Leonardo DiCaprio",
+      "Tom Hardy",
+      "Ellen Page",
+      "Joseph Gordon-Levitt",
+    ],
+    genres: ["Action", "Sci-Fi", "Thriller"],
+  };
+};
+
+const loadFavoriteMovies = (): void => {
   isLoading.value = true;
 
   setTimeout(() => {
-    allMovies.value = allFavoriteIds.value.map((id) => generateMockMovie(id));
+    allMovies.value = allFavoriteIds.value.map((id: string) =>
+      generateMockMovie(id)
+    );
 
     loadMoreMovies();
 
     if (allMovies.value.length > 0) {
-      heroBanner.value = allMovies.value[0];
+      heroBanner.value = allMovies.value[0] ?? null;
+    } else {
+      heroBanner.value = null;
     }
 
     isLoading.value = false;
   }, 500);
 };
 
-const loadMoreMovies = () => {
-  const start = (page.value - 1) * itemsPerPage;
-  const end = start + itemsPerPage;
-  const newMovies = allMovies.value.slice(start, end);
+const loadMoreMovies = (): void => {
+  const start: number = (page.value - 1) * itemsPerPage;
+  const end: number = start + itemsPerPage;
+  const newMovies: EnrichedMovie[] = allMovies.value.slice(start, end);
 
   displayedMovies.value.push(...newMovies);
 };
@@ -83,14 +116,13 @@ watch(
   { deep: true }
 );
 
-const sentinel = ref<HTMLElement | null>(null);
+const sentinel: Ref<HTMLElement | null> = ref(null);
 
 onMounted(() => {
   loadFavoriteMovies();
 
   let isWaiting = false;
-
-  const checkAndLoad = () => {
+  const checkAndLoad = (): boolean => {
     if (isLoading.value) return false;
     if (isWaiting) return false;
     if (!hasMore.value) return false;
@@ -106,9 +138,9 @@ onMounted(() => {
     return true;
   };
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting) {
+  const observer: IntersectionObserver = new IntersectionObserver(
+    (entries: IntersectionObserverEntry[]) => {
+      if (entries[0] && entries[0].isIntersecting) {
         checkAndLoad();
       }
     },
@@ -120,12 +152,13 @@ onMounted(() => {
 
   if (sentinel.value) observer.observe(sentinel.value);
 
-  const handleScroll = () => {
-    const scrollTop = window.scrollY || document.documentElement.scrollTop;
-    const scrollHeight = document.documentElement.scrollHeight;
-    const clientHeight = document.documentElement.clientHeight;
+  const handleScroll = (): void => {
+    const scrollTop: number =
+      window.scrollY || document.documentElement.scrollTop;
+    const scrollHeight: number = document.documentElement.scrollHeight;
+    const clientHeight: number = document.documentElement.clientHeight;
 
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+    const scrollPercentage: number = (scrollTop + clientHeight) / scrollHeight;
 
     if (scrollPercentage >= 0.95) {
       checkAndLoad();
@@ -140,23 +173,33 @@ onMounted(() => {
   };
 });
 
-const handleBannerLoaded = () => {
+const handleBannerLoaded = (): void => {
   isBannerLoaded.value = true;
 };
 
-const handleImageLoaded = (id: string) => {
+const handleImageLoaded = (id: string): void => {
   loadedImages.value[id] = true;
 };
 
-const handleMovieClick = (movie) => {
+const handleMovieClick = (movie: EnrichedMovie): void => {
   selectedMovie.value = movie;
   showModal.value = true;
   heroBanner.value = movie;
 };
 
-const handleToggleFavorite = (movieId: string, event: Event) => {
+const handleToggleFavorite = (movieId: string, event: Event): void => {
   event.stopPropagation();
   toggleFavorite(movieId);
+};
+
+const handlePlayBanner = (): void => {
+  if (heroBanner.value) {
+    showVideoPlayer.value = true;
+  }
+};
+
+const handleBackFromPlayer = (): void => {
+  showVideoPlayer.value = false;
 };
 </script>
 
@@ -191,12 +234,16 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
         <p class="hero__desc">{{ heroBanner.description }}</p>
 
         <div class="hero__buttons">
-          <v-btn color="white" class="btn-play">
+          <v-btn color="white" class="btn-play" @click="handlePlayBanner">
             <Play :size="20" :fill="'black'" />
             Play
           </v-btn>
 
-          <v-btn color="grey-darken-4" class="btn-more">
+          <v-btn
+            color="grey-darken-4"
+            class="btn-more"
+            @click="handleToggleFavorite(heroBanner.imdbID, $event)"
+          >
             <Heart
               :size="20"
               :fill="isFavorite(heroBanner.imdbID) ? '#ef4444' : 'none'"
@@ -284,6 +331,12 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
     <div ref="sentinel" style="height: 20px; margin-bottom: 40px"></div>
 
     <MovieDetailModal v-model="showModal" :movie="selectedMovie" />
+
+    <VideoPlayerModal
+      v-model="showVideoPlayer"
+      :movie="heroBanner"
+      @back="handleBackFromPlayer"
+    />
   </div>
 </template>
 

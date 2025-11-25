@@ -1,31 +1,34 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { Search, X } from 'lucide-vue-next';
+import { ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { Search, X } from "lucide-vue-next";
 
 const route = useRoute();
 const router = useRouter();
 
-const searchQuery = ref('');
+const searchQuery = ref("");
 const isSearchActive = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 
 const isActive = (path: string) => route.path === path;
 
-// Watch route changes to sync search query
-watch(() => route.query.q, (newQuery) => {
-  if (newQuery && typeof newQuery === 'string') {
-    searchQuery.value = newQuery;
-    isSearchActive.value = true;
-  } else {
-    searchQuery.value = '';
-    isSearchActive.value = false;
-  }
-}, { immediate: true });
+watch(
+  () => route.query.q,
+  (newQuery) => {
+    if (newQuery && typeof newQuery === "string") {
+      searchQuery.value = newQuery;
+      isSearchActive.value = true;
+    } else {
+      searchQuery.value = "";
+      isSearchActive.value = false;
+    }
+  },
+  { immediate: true }
+);
 
 const toggleSearch = () => {
   isSearchActive.value = !isSearchActive.value;
-  
+
   if (isSearchActive.value) {
     setTimeout(() => {
       searchInputRef.value?.focus();
@@ -38,24 +41,22 @@ const toggleSearch = () => {
 const handleSearch = () => {
   if (searchQuery.value.trim()) {
     router.push({
-      path: '/search',
-      query: { q: searchQuery.value.trim() }
+      path: "/search",
+      query: { q: searchQuery.value.trim() },
     });
   }
 };
 
 const clearSearch = () => {
-  searchQuery.value = '';
+  searchQuery.value = "";
   isSearchActive.value = false;
-  
-  // Navigate back to home if currently on search page
-  if (route.path === '/search') {
-    router.push('/');
+
+  if (route.path === "/search") {
+    router.push("/");
   }
 };
 
 const handleInput = () => {
-  // Auto search while typing (debounce bisa ditambahkan nanti)
   if (searchQuery.value.trim()) {
     handleSearch();
   }
@@ -70,18 +71,21 @@ const handleInput = () => {
       </div>
 
       <nav class="navbar__menu">
-        <router-link to="/" :class="{ active: isActive('/') }">Home</router-link>
-        <router-link to="/my-list" :class="{ active: isActive('/my-list') }">My List</router-link>
+        <router-link to="/" :class="{ active: isActive('/') }"
+          >Home</router-link
+        >
+        <router-link to="/my-list" :class="{ active: isActive('/my-list') }"
+          >My List</router-link
+        >
       </nav>
     </div>
 
     <div class="navbar__right">
-      <!-- Search Bar -->
       <div class="search-container" :class="{ active: isSearchActive }">
         <button class="search-icon-btn" @click="toggleSearch">
           <Search :size="20" />
         </button>
-        
+
         <transition name="search-expand">
           <div v-if="isSearchActive" class="search-input-wrapper">
             <input
@@ -101,11 +105,7 @@ const handleInput = () => {
         </transition>
       </div>
 
-      <img
-        class="navbar__avatar"
-        src="https://i.pravatar.cc/50"
-        alt="User"
-      />
+      <img class="navbar__avatar" src="https://i.pravatar.cc/50" alt="User" />
     </div>
   </header>
 </template>
@@ -137,7 +137,7 @@ const handleInput = () => {
 
   &__logo {
     cursor: pointer;
-    
+
     h1 {
       font-size: 28px;
       font-weight: 900;
@@ -183,7 +183,6 @@ const handleInput = () => {
   }
 }
 
-/* Search Container */
 .search-container {
   display: flex;
   align-items: center;
@@ -253,7 +252,6 @@ const handleInput = () => {
   }
 }
 
-/* Search Expand Animation */
 .search-expand-enter-active,
 .search-expand-leave-active {
   transition: all 0.3s ease;
@@ -269,7 +267,6 @@ const handleInput = () => {
   transform: translateX(-10px);
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .navbar {
     padding: 0 20px;

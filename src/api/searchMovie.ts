@@ -10,11 +10,14 @@ import { ref, type Ref } from 'vue'
 
 export const searchMovies = async ({
   Title = ref(""),
+  page = ref(1),
 }: {
   Title?: Ref<string, string>
+  page?: Ref<number, number>
 }) => {
   const params = {
     Title: Title.value,
+    page: page.value,
   }
 
   const response = await api.get<MoviesResponse>(
@@ -29,32 +32,38 @@ export const searchMovies = async ({
 
 export const searchMoviesQueryKey = ({
   Title = ref(""),
+  page = ref(1),
 }: {
   Title?: Ref<string, string>
-}) => ['search-movies', { Title }]
+  page?: Ref<number, number>
+}) => ['search-movies', { Title, page }]
 
 export const searchMoviesQueryOptions = ({
   Title = ref(""),
+  page = ref(1),
 }: {
   Title?: Ref<string, string>
+  page?: Ref<number, number>
 }) => {
   return queryOptions({
-    queryKey: searchMoviesQueryKey({ Title}),
-    queryFn: () => searchMovies({ Title}),
+    queryKey: searchMoviesQueryKey({ Title, page }),
+    queryFn: () => searchMovies({ Title, page }),
   })
 }
 
 type UseSearchMoviesParams = {
   queryConfig?: QueryConfig<typeof searchMovies>
   Title?: Ref<string, string>
+  page?: Ref<number, number>
 }
 
 export const useSearchMovies = ({
   queryConfig,
   Title = ref(""),
+  page = ref(1),
 }: UseSearchMoviesParams = {}) => {
   return useQuery({
-    ...searchMoviesQueryOptions({ Title }),
+    ...searchMoviesQueryOptions({ Title, page }),
     ...queryConfig,
   })
 }

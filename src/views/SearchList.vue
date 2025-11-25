@@ -1,83 +1,221 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  type Ref,
+  type ComputedRef,
+} from "vue";
 import { useRoute } from "vue-router";
-import { Star, Heart, Play, Search as SearchIcon } from 'lucide-vue-next';
-import MovieDetailModal from '../components/MovieDetailModal.vue';
-import { useFavorites } from '../hooks/useFavorites';
-import { useSearchMovies } from '../api/searchMovie';
+import { Star, Heart, Play, Search as SearchIcon } from "lucide-vue-next";
+import MovieDetailModal from "../components/MovieDetailModal.vue";
+import VideoPlayerModal from "../components/VideoPlayerModal.vue";
+import { useFavorites } from "../hooks/useFavorites";
+import { useSearchMovies } from "../api/searchMovie";
+
+interface BaseMovie {
+  imdbID: string;
+  Title: string;
+  Year: number | string;
+  Poster?: string;
+}
+
+interface EnrichedMovie extends BaseMovie {
+  rating: number;
+  description: string;
+  duration: string;
+  cast: string[];
+  genres: string[];
+}
 
 const route = useRoute();
 
-// Search query from URL
-const searchQuery = computed(() => (route.query.q as string) || '');
+const searchQuery: ComputedRef<string> = computed(
+  () => (route.query.q as string) || ""
+);
 
-// API call
+const page = ref<number>(1);
+const totalPages = ref<number | null>(null);
+
 const { data: searchResults, isLoading } = useSearchMovies({
   Title: searchQuery,
+  page: computed(() => page.value),
 });
 
-// States
-const allMovies = ref([]);
+const allMovies = ref<EnrichedMovie[]>([]);
+const lastLoadedPage = ref<number>(0);
 const hoveredMovieId = ref<string | null>(null);
-const selectedMovie = ref(null);
-const showModal = ref(false);
-const heroBanner = ref(null);
+const selectedMovie = ref<EnrichedMovie | null>(null);
+const showModal = ref<boolean>(false);
+const showVideoPlayer = ref<boolean>(false);
+const heroBanner = ref<EnrichedMovie | null>(null);
 const loadedImages = ref<Record<string, boolean>>({});
-const isBannerLoaded = ref(false);
+const isBannerLoaded = ref<boolean>(false);
 
-const isFirstLoading = computed(() => isLoading.value && allMovies.value.length === 0);
-const hasResults = computed(() => allMovies.value.length > 0);
+const loadLimit: number = 50;
+const loadedCount = ref<number>(0);
+const showLoadMore = ref<boolean>(false);
 
-// Favorites
+const isFirstLoading: ComputedRef<boolean> = computed(
+  () => isLoading.value && page.value === 1
+);
+
+const hasResults: ComputedRef<boolean> = computed(
+  () => allMovies.value.length > 0
+);
+
 const { isFavorite, toggleFavorite } = useFavorites();
 
-// Mock data generator
-const generateMockMovie = (movie) => ({
+const generateMockMovie = (movie: any): EnrichedMovie => ({
   ...movie,
-  rating: (7 + Math.random() * 2.5).toFixed(1),
-  description: 'A mind-bending thriller that explores the depths of human consciousness and reality. An epic journey through time and space that will leave you questioning everything.',
-  duration: '2h 28m',
-  cast: ['Leonardo DiCaprio', 'Tom Hardy', 'Ellen Page', 'Joseph Gordon-Levitt'],
-  genres: ['Action', 'Sci-Fi', 'Thriller']
+  rating: parseFloat((7 + Math.random() * 2.5).toFixed(1)),
+  description:
+    "A mind-bending thriller that explores the depths of human consciousness and reality. An epic journey through time and space that will leave you questioning everything.",
+  duration: "2h 28m",
+  cast: [
+    "Leonardo DiCaprio",
+    "Tom Hardy",
+    "Ellen Page",
+    "Joseph Gordon-Levitt",
+  ],
+  genres: ["Action", "Sci-Fi", "Thriller"],
 });
 
-// Watch search results
 watch(searchResults, () => {
   if (!searchResults.value?.data) return;
 
-  allMovies.value = searchResults.value.data.map(movie => generateMockMovie(movie));
+  totalPages.value = searchResults.value.total_pages;
 
-  // Set hero banner to first result
-  if (allMovies.value.length > 0) {
-    heroBanner.value = allMovies.value[0];
-  } else {
-    heroBanner.value = null;
+  if (searchResults.value.page === lastLoadedPage.value) return;
+  lastLoadedPage.value = searchResults.value.page;
+
+  if (loadedCount.value >= loadLimit) {
+    showLoadMore.value = true;
+    return;
+  }
+
+  const remaining: number = loadLimit - loadedCount.value;
+  const incoming: EnrichedMovie[] =
+    searchResults.value.data.map(generateMockMovie);
+  const appendData: EnrichedMovie[] = incoming.slice(0, remaining);
+
+  allMovies.value.push(...appendData);
+  loadedCount.value += appendData.length;
+
+  if (loadedCount.value >= loadLimit) {
+    showLoadMore.value = true;
+  }
+
+  if (allMovies.value.length > 0 && !heroBanner.value) {
+    heroBanner.value = allMovies.value[0] ?? null;
   }
 });
 
-const handleBannerLoaded = () => {
+watch(searchQuery, () => {
+  page.value = 1;
+  allMovies.value = [];
+  lastLoadedPage.value = 0;
+  loadedCount.value = 0;
+  showLoadMore.value = false;
+  heroBanner.value = null;
+  isBannerLoaded.value = false;
+  loadedImages.value = {};
+});
+
+const sentinel: Ref<HTMLElement | null> = ref(null);
+
+onMounted(() => {
+  let isWaiting = false;
+  const checkAndLoad = (): boolean => {
+    if (isLoading.value) return false;
+    if (isWaiting) return false;
+    if (showLoadMore.value) return false;
+    if (totalPages.value && page.value >= totalPages.value) return false;
+
+    isWaiting = true;
+    page.value += 1;
+
+    setTimeout(() => {
+      isWaiting = false;
+    }, 300);
+
+    return true;
+  };
+
+  const observer: IntersectionObserver = new IntersectionObserver(
+    (entries: IntersectionObserverEntry[]) => {
+      if (entries[0] && entries[0].isIntersecting) {
+        checkAndLoad();
+      }
+    },
+    {
+      threshold: 0.1,
+      rootMargin: "200px",
+    }
+  );
+
+  if (sentinel.value) observer.observe(sentinel.value);
+
+  const handleScroll = (): void => {
+    const scrollTop: number =
+      window.scrollY || document.documentElement.scrollTop;
+    const scrollHeight: number = document.documentElement.scrollHeight;
+    const clientHeight: number = document.documentElement.clientHeight;
+
+    const scrollPercentage: number = (scrollTop + clientHeight) / scrollHeight;
+
+    if (scrollPercentage >= 0.95) {
+      checkAndLoad();
+    }
+  };
+
+  window.addEventListener("scroll", handleScroll, { passive: true });
+
+  return () => {
+    observer.disconnect();
+    window.removeEventListener("scroll", handleScroll);
+  };
+});
+
+const handleLoadMore = (): void => {
+  showLoadMore.value = false;
+  loadedCount.value = 0;
+  page.value += 1;
+};
+
+const handleBannerLoaded = (): void => {
   isBannerLoaded.value = true;
 };
 
-const handleImageLoaded = (id: string) => {
+const handleImageLoaded = (id: string): void => {
   loadedImages.value[id] = true;
 };
 
-const handleMovieClick = (movie) => {
+const handleMovieClick = (movie: EnrichedMovie): void => {
   selectedMovie.value = movie;
   showModal.value = true;
   heroBanner.value = movie;
 };
 
-const handleToggleFavorite = (movieId: string, event: Event) => {
+const handleToggleFavorite = (movieId: string, event: Event): void => {
   event.stopPropagation();
   toggleFavorite(movieId);
+};
+
+const handlePlayBanner = (): void => {
+  if (heroBanner.value) {
+    showVideoPlayer.value = true;
+  }
+};
+
+const handleBackFromPlayer = (): void => {
+  showVideoPlayer.value = false;
 };
 </script>
 
 <template>
   <div class="search-list">
-    <!-- HERO SKELETON -->
     <section v-if="isFirstLoading" class="hero hero-skeleton">
       <div class="hero-skeleton-bg"></div>
 
@@ -91,7 +229,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       </div>
     </section>
 
-    <!-- HERO -->
     <section class="hero" v-if="heroBanner && !isFirstLoading">
       <div v-if="!isBannerLoaded" class="hero-skeleton-bg"></div>
 
@@ -108,14 +245,18 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
         <p class="hero__desc">{{ heroBanner.description }}</p>
 
         <div class="hero__buttons">
-          <v-btn color="white" class="btn-play">
+          <v-btn color="white" class="btn-play" @click="handlePlayBanner">
             <Play :size="20" :fill="'black'" />
             Play
           </v-btn>
 
-          <v-btn color="grey-darken-4" class="btn-more">
-            <Heart 
-              :size="20" 
+          <v-btn
+            color="grey-darken-4"
+            class="btn-more"
+            @click="handleToggleFavorite(heroBanner.imdbID, $event)"
+          >
+            <Heart
+              :size="20"
               :fill="isFavorite(heroBanner.imdbID) ? '#ef4444' : 'none'"
               :color="isFavorite(heroBanner.imdbID) ? '#ef4444' : 'white'"
             />
@@ -127,42 +268,45 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       <div class="hero__fade"></div>
     </section>
 
-    <!-- NO RESULTS STATE -->
-    <section v-if="!isFirstLoading && !hasResults && searchQuery" class="empty-state">
+    <section
+      v-if="!isFirstLoading && !hasResults && searchQuery"
+      class="empty-state"
+    >
       <div class="empty-content">
         <SearchIcon :size="64" class="empty-icon" />
         <h2 class="empty-title">No results found</h2>
         <p class="empty-desc">
-          We couldn't find any movies matching "<strong>{{ searchQuery }}</strong>"
+          We couldn't find any movies matching "<strong>{{
+            searchQuery
+          }}</strong
+          >"
         </p>
         <p class="empty-hint">Try searching with different keywords</p>
       </div>
     </section>
 
-    <!-- MOVIE GRID -->
     <section class="movie-grid" v-if="hasResults">
       <h2 class="grid-title">
-        Search Results for "{{ searchQuery }}" 
-        <span class="result-count">({{ allMovies.length }} results)</span>
+        Search Results for "{{ searchQuery }}"
+        <span class="result-count"
+          >({{ searchResults?.total || allMovies.length }} results)</span
+        >
       </h2>
 
       <div class="grid-list">
-        <!-- Skeleton -->
         <template v-if="isFirstLoading">
           <div v-for="n in 10" :key="'sk' + n" class="grid-item sk-item"></div>
         </template>
 
-        <!-- Real items -->
         <template v-else>
-          <div 
-            v-for="movie in allMovies" 
-            :key="movie.imdbID" 
+          <div
+            v-for="movie in allMovies"
+            :key="movie.imdbID"
             class="grid-item"
             @mouseenter="hoveredMovieId = movie.imdbID"
             @mouseleave="hoveredMovieId = null"
             @click="handleMovieClick(movie)"
           >
-            <!-- skeleton -->
             <div v-if="!loadedImages[movie.imdbID]" class="img-skeleton"></div>
 
             <img
@@ -172,8 +316,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
               :class="{ hidden: !loadedImages[movie.imdbID] }"
             />
 
-            <!-- Hover Overlay -->
-            <div 
+            <div
               class="movie-overlay"
               :class="{ visible: hoveredMovieId === movie.imdbID }"
             >
@@ -186,13 +329,13 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
                   </div>
                   <span class="year">{{ movie.Year }}</span>
                 </div>
-                <button 
+                <button
                   class="btn-heart-overlay"
                   :class="{ 'is-favorite': isFavorite(movie.imdbID) }"
                   @click="handleToggleFavorite(movie.imdbID, $event)"
                 >
-                  <Heart 
-                    :size="20" 
+                  <Heart
+                    :size="20"
                     :fill="isFavorite(movie.imdbID) ? '#ef4444' : 'none'"
                     :color="isFavorite(movie.imdbID) ? '#ef4444' : 'white'"
                   />
@@ -204,10 +347,24 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       </div>
     </section>
 
-    <!-- MODAL COMPONENT -->
-    <MovieDetailModal 
-      v-model="showModal"
-      :movie="selectedMovie"
+    <div v-if="isLoading && page > 1" class="loading">
+      <v-progress-circular indeterminate color="primary" size="50" />
+    </div>
+
+    <div v-if="showLoadMore" class="load-more-container">
+      <v-btn color="primary" size="large" @click="handleLoadMore">
+        Load More
+      </v-btn>
+    </div>
+
+    <div ref="sentinel" style="height: 20px; margin-bottom: 40px"></div>
+
+    <MovieDetailModal v-model="showModal" :movie="selectedMovie" />
+
+    <VideoPlayerModal
+      v-model="showVideoPlayer"
+      :movie="heroBanner"
+      @back="handleBackFromPlayer"
     />
   </div>
 </template>
@@ -219,7 +376,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   min-height: 100vh;
 }
 
-/* HERO SECTION */
 .hero {
   position: relative;
   height: 75vh;
@@ -244,7 +400,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
     font-size: 54px;
     font-weight: 900;
     margin-bottom: 18px;
-    text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
   }
 
   &__desc {
@@ -252,7 +408,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
     line-height: 1.5;
     opacity: 0.9;
     margin-bottom: 18px;
-    text-shadow: 1px 1px 4px rgba(0,0,0,0.8);
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
   }
 
   &__buttons {
@@ -286,7 +442,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 }
 
-/* EMPTY STATE */
 .empty-state {
   min-height: 60vh;
   display: flex;
@@ -327,7 +482,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   opacity: 0.5;
 }
 
-/* MOVIE GRID */
 .movie-grid {
   margin-top: -40px;
   position: relative;
@@ -348,9 +502,11 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 
   .grid-list {
+    margin-left: 4rem;
+    margin-right: 4rem;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 18px;
+    gap: 2rem;
     padding: 0 20px;
   }
 
@@ -376,14 +532,18 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 }
 
-/* MOVIE OVERLAY */
 .movie-overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.3) 50%, transparent 100%);
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.3) 50%,
+    transparent 100%
+  );
   opacity: 0;
   transition: opacity 0.3s;
   display: flex;
@@ -435,7 +595,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   height: 40px;
   border-radius: 50%;
   border: 2px solid white;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
   color: white;
   display: flex;
   align-items: center;
@@ -444,7 +604,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   transition: all 0.2s;
 
   &:hover {
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.2);
     transform: scale(1.1);
   }
 
@@ -458,7 +618,18 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 }
 
-/* SKELETON ANIMATION */
+.loading {
+  text-align: center;
+  margin: 40px 0;
+}
+
+.load-more-container {
+  width: fit-content;
+  margin-top: 4rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 @keyframes pulse {
   0% {
     opacity: 0.4;
@@ -471,7 +642,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 }
 
-/* HERO SKELETON */
 .hero-skeleton {
   position: relative;
   height: 75vh;
@@ -524,7 +694,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 }
 
-/* MOVIE CARD SKELETON */
 .sk-item {
   background: #1b1b1b;
   border-radius: 8px;
@@ -552,7 +721,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 }
 
-/* HERO IMAGE SKELETON */
 .hero-skeleton-bg {
   width: 100%;
   height: 100%;
@@ -572,7 +740,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   transition: opacity 0.35s ease;
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .movie-grid .grid-list {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

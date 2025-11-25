@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Star, Heart, Play, X, Users } from 'lucide-vue-next';
-import { useFavorites } from '../hooks/useFavorites';
+import { computed, ref } from "vue";
+import { Star, Heart, Play, X, Users } from "lucide-vue-next";
+import { useFavorites } from "../hooks/useFavorites";
+import VideoPlayerModal from "./VideoPlayerModal.vue";
 
 interface Props {
   movie: any | null;
@@ -9,13 +10,15 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'update:modelValue', value: boolean): void;
+  (e: "update:modelValue", value: boolean): void;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const { isFavorite, toggleFavorite } = useFavorites();
+
+const showVideoPlayer = ref(false);
 
 const isMovieFavorited = computed(() => {
   return props.movie ? isFavorite(props.movie.imdbID) : false;
@@ -27,25 +30,31 @@ const handleToggleFavorite = () => {
   }
 };
 
+const handlePlayMovie = () => {
+  showVideoPlayer.value = true;
+};
+
+const handleBackFromPlayer = () => {
+  showVideoPlayer.value = false;
+};
+
 const closeModal = () => {
-  emit('update:modelValue', false);
+  emit("update:modelValue", false);
 };
 </script>
 
 <template>
-  <v-dialog 
+  <v-dialog
     :model-value="modelValue"
     @update:model-value="emit('update:modelValue', $event)"
     max-width="900px"
     @click:outside="closeModal"
   >
     <v-card v-if="movie" class="modal-card">
-      <!-- Close Button -->
       <button class="modal-close" @click="closeModal">
         <X :size="24" />
       </button>
 
-      <!-- Modal Banner -->
       <div class="modal-banner">
         <img
           :src="`https://picsum.photos/1200/500?random=${movie.imdbID}`"
@@ -54,18 +63,22 @@ const closeModal = () => {
         <div class="modal-banner-overlay">
           <h1 class="modal-title">{{ movie.Title }}</h1>
           <div class="modal-actions">
-            <v-btn color="white" class="btn-play-modal">
+            <v-btn
+              color="white"
+              class="btn-play-modal"
+              @click="handlePlayMovie"
+            >
               <Play :size="20" :fill="'black'" />
               Play
             </v-btn>
-            <button 
+            <button
               class="btn-heart-modal"
               :class="{ 'is-favorite': isMovieFavorited }"
               @click="handleToggleFavorite"
             >
-              <Heart 
-                :size="20" 
-                :fill="isMovieFavorited ? '#ef4444' : 'none'" 
+              <Heart
+                :size="20"
+                :fill="isMovieFavorited ? '#ef4444' : 'none'"
                 :color="isMovieFavorited ? '#ef4444' : 'white'"
               />
             </button>
@@ -73,7 +86,6 @@ const closeModal = () => {
         </div>
       </div>
 
-      <!-- Modal Details -->
       <div class="modal-details">
         <div class="detail-row">
           <div class="rating-large">
@@ -87,11 +99,7 @@ const closeModal = () => {
         <p class="description">{{ movie.description }}</p>
 
         <div class="genres">
-          <v-chip 
-            v-for="genre in movie.genres" 
-            :key="genre"
-            size="small"
-          >
+          <v-chip v-for="genre in movie.genres" :key="genre" size="small">
             {{ genre }}
           </v-chip>
         </div>
@@ -102,8 +110,8 @@ const closeModal = () => {
             <span>Cast</span>
           </div>
           <div class="cast-list">
-            <span 
-              v-for="(actor, index) in movie.cast" 
+            <span
+              v-for="(actor, index) in movie.cast"
               :key="actor"
               class="cast-name"
             >
@@ -114,10 +122,15 @@ const closeModal = () => {
       </div>
     </v-card>
   </v-dialog>
+
+  <VideoPlayerModal
+    v-model="showVideoPlayer"
+    :movie="movie"
+    @back="handleBackFromPlayer"
+  />
 </template>
 
 <style lang="scss" scoped>
-/* MODAL STYLES */
 :deep(.v-dialog) {
   background: transparent;
 }
@@ -138,7 +151,7 @@ const closeModal = () => {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(0,0,0,0.8);
+  background: rgba(0, 0, 0, 0.8);
   color: white;
   border: none;
   display: flex;
@@ -148,7 +161,7 @@ const closeModal = () => {
   transition: all 0.2s;
 
   &:hover {
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.2);
     transform: scale(1.1);
   }
 }
@@ -171,7 +184,7 @@ const closeModal = () => {
   left: 0;
   right: 0;
   padding: 40px;
-  background: linear-gradient(to top, rgba(24,24,24,1) 0%, transparent 100%);
+  background: linear-gradient(to top, rgba(24, 24, 24, 1) 0%, transparent 100%);
 }
 
 .modal-title {
@@ -198,7 +211,7 @@ const closeModal = () => {
     height: 44px;
     border-radius: 50%;
     border: 2px solid white;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.5);
     color: white;
     display: flex;
     align-items: center;
@@ -207,7 +220,7 @@ const closeModal = () => {
     transition: all 0.2s;
 
     &:hover {
-      background: rgba(255,255,255,0.2);
+      background: rgba(255, 255, 255, 0.2);
       transform: scale(1.1);
     }
 
@@ -241,7 +254,8 @@ const closeModal = () => {
   font-weight: 700;
 }
 
-.duration, .year {
+.duration,
+.year {
   font-size: 16px;
   opacity: 0.7;
 }
@@ -261,7 +275,7 @@ const closeModal = () => {
 }
 
 .cast-section {
-  border-top: 1px solid rgba(255,255,255,0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 20px;
 }
 
@@ -281,7 +295,6 @@ const closeModal = () => {
   opacity: 0.8;
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .modal-title {
     font-size: 32px;
