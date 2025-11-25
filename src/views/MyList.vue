@@ -1,38 +1,42 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
-import { useGetMovies } from "../api/getMovies";
 import { Star, Heart, Play } from "lucide-vue-next";
 import MovieDetailModal from "../components/MovieDetailModal.vue";
 import { useFavorites } from "../hooks/useFavorites";
 
-const page = ref(1);
-const totalPages = ref<number | null>(null);
-
-const { data: movies, isLoading } = useGetMovies({
-  page: computed(() => page.value),
-});
+const { allFavoriteIds, isFavorite, toggleFavorite } = useFavorites();
 
 const allMovies = ref([]);
-const lastLoadedPage = ref(0);
-const isFirstLoading = computed(() => isLoading.value && page.value === 1);
-
-const loadedImages = ref<Record<string, boolean>>({});
-const isBannerLoaded = ref(false);
-
-const loadLimit = 50;
-const loadedCount = ref(0);
-const showLoadMore = ref(false);
-
+const displayedMovies = ref([]);
+const page = ref(1);
+const itemsPerPage = 20;
 const hoveredMovieId = ref<string | null>(null);
 const selectedMovie = ref(null);
 const showModal = ref(false);
 const heroBanner = ref(null);
+const isLoading = ref(false);
+const loadedImages = ref<Record<string, boolean>>({});
+const isBannerLoaded = ref(false);
 
-const { isFavorite, toggleFavorite } = useFavorites();
+const isFirstLoading = computed(
+  () => allMovies.value.length === 0 && isLoading.value
+);
+const hasMore = computed(
+  () => displayedMovies.value.length < allMovies.value.length
+);
 
-const generateMockMovie = (movie) => ({
-  ...movie,
-  rating: 7.4,
+const generateMockMovie = (movieId: string) => ({
+  imdbID: movieId,
+  Title: [
+    "Inception",
+    "The Dark Knight",
+    "Interstellar",
+    "Pulp Fiction",
+    "The Matrix",
+    "Fight Club",
+  ][Math.floor(Math.random() * 6)],
+  Year: 1990 + Math.floor(Math.random() * 30),
+  rating: (7 + Math.random() * 2.5).toFixed(1),
   description:
     "A mind-bending thriller that explores the depths of human consciousness and reality. An epic journey through time and space that will leave you questioning everything.",
   duration: "2h 28m",
@@ -45,48 +49,55 @@ const generateMockMovie = (movie) => ({
   genres: ["Action", "Sci-Fi", "Thriller"],
 });
 
-watch(movies, () => {
-  if (!movies.value?.data) return;
+const loadFavoriteMovies = () => {
+  isLoading.value = true;
 
-  totalPages.value = movies.value.total_pages;
+  setTimeout(() => {
+    allMovies.value = allFavoriteIds.value.map((id) => generateMockMovie(id));
 
-  if (movies.value.page === lastLoadedPage.value) return;
-  lastLoadedPage.value = movies.value.page;
+    loadMoreMovies();
 
-  if (loadedCount.value >= loadLimit) {
-    showLoadMore.value = true;
-    return;
-  }
+    if (allMovies.value.length > 0) {
+      heroBanner.value = allMovies.value[0];
+    }
 
-  const remaining = loadLimit - loadedCount.value;
-  const incoming = movies.value.data;
-  const appendData = incoming.slice(0, remaining);
+    isLoading.value = false;
+  }, 500);
+};
 
-  allMovies.value.push(...appendData);
-  loadedCount.value += appendData.length;
+const loadMoreMovies = () => {
+  const start = (page.value - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  const newMovies = allMovies.value.slice(start, end);
 
-  if (loadedCount.value >= loadLimit) {
-    showLoadMore.value = true;
-  }
+  displayedMovies.value.push(...newMovies);
+};
 
-  if (allMovies.value.length > 0 && !heroBanner.value) {
-    heroBanner.value = generateMockMovie(allMovies.value[0]);
-  }
-});
+watch(
+  allFavoriteIds,
+  () => {
+    page.value = 1;
+    displayedMovies.value = [];
+    loadFavoriteMovies();
+  },
+  { deep: true }
+);
 
 const sentinel = ref<HTMLElement | null>(null);
 
 onMounted(() => {
+  loadFavoriteMovies();
+
   let isWaiting = false;
 
   const checkAndLoad = () => {
     if (isLoading.value) return false;
     if (isWaiting) return false;
-    if (showLoadMore.value) return false;
-    if (totalPages.value && page.value >= totalPages.value) return false;
+    if (!hasMore.value) return false;
 
     isWaiting = true;
     page.value += 1;
+    loadMoreMovies();
 
     setTimeout(() => {
       isWaiting = false;
@@ -129,12 +140,6 @@ onMounted(() => {
   };
 });
 
-const handleLoadMore = () => {
-  showLoadMore.value = false;
-  loadedCount.value = 0;
-  page.value += 1;
-};
-
 const handleBannerLoaded = () => {
   isBannerLoaded.value = true;
 };
@@ -144,10 +149,9 @@ const handleImageLoaded = (id: string) => {
 };
 
 const handleMovieClick = (movie) => {
-  const mockData = generateMockMovie(movie);
-  selectedMovie.value = mockData;
+  selectedMovie.value = movie;
   showModal.value = true;
-  heroBanner.value = mockData;
+  heroBanner.value = movie;
 };
 
 const handleToggleFavorite = (movieId: string, event: Event) => {
@@ -157,8 +161,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
 </script>
 
 <template>
-  <div class="home">
-    <!-- HERO SKELETON -->
+  <div class="my-list">
     <section v-if="isFirstLoading" class="hero hero-skeleton">
       <div class="hero-skeleton-bg"></div>
 
@@ -172,8 +175,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       </div>
     </section>
 
-    <!-- HERO -->
-    <section class="hero" v-if="heroBanner">
+    <section class="hero" v-if="heroBanner && !isFirstLoading">
       <div v-if="!isBannerLoaded" class="hero-skeleton-bg"></div>
 
       <img
@@ -197,14 +199,8 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
           <v-btn color="grey-darken-4" class="btn-more">
             <Heart
               :size="20"
-              :fill="
-                heroBanner && isFavorite(heroBanner.imdbID) ? '#ef4444' : 'none'
-              "
-              :color="
-                heroBanner && isFavorite(heroBanner.imdbID)
-                  ? '#ef4444'
-                  : 'white'
-              "
+              :fill="isFavorite(heroBanner.imdbID) ? '#ef4444' : 'none'"
+              :color="isFavorite(heroBanner.imdbID) ? '#ef4444' : 'white'"
             />
             My List
           </v-btn>
@@ -214,27 +210,37 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       <div class="hero__fade"></div>
     </section>
 
-    <!-- MOVIE GRID -->
-    <section class="movie-grid">
-      <h2 class="grid-title">Popular Movies</h2>
+    <section
+      v-if="!isFirstLoading && allMovies.length === 0"
+      class="empty-state"
+    >
+      <div class="empty-content">
+        <Heart :size="64" class="empty-icon" />
+        <h2 class="empty-title">Your list is empty</h2>
+        <p class="empty-desc">
+          Start adding movies to your favorites to see them here.
+        </p>
+        <v-btn color="primary" size="large" to="/"> Browse Movies </v-btn>
+      </div>
+    </section>
+
+    <section class="movie-grid" v-if="displayedMovies.length > 0">
+      <h2 class="grid-title">My Favorites ({{ allMovies.length }})</h2>
 
       <div class="grid-list">
-        <!-- Skeleton -->
         <template v-if="isFirstLoading">
           <div v-for="n in 10" :key="'sk' + n" class="grid-item sk-item"></div>
         </template>
 
-        <!-- Real items -->
         <template v-else>
           <div
-            v-for="movie in allMovies"
+            v-for="movie in displayedMovies"
             :key="movie.imdbID"
             class="grid-item"
             @mouseenter="hoveredMovieId = movie.imdbID"
             @mouseleave="hoveredMovieId = null"
             @click="handleMovieClick(movie)"
           >
-            <!-- skeleton -->
             <div v-if="!loadedImages[movie.imdbID]" class="img-skeleton"></div>
 
             <img
@@ -244,7 +250,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
               :class="{ hidden: !loadedImages[movie.imdbID] }"
             />
 
-            <!-- Hover Overlay -->
             <div
               class="movie-overlay"
               :class="{ visible: hoveredMovieId === movie.imdbID }"
@@ -254,7 +259,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
                 <div class="movie-meta">
                   <div class="rating">
                     <Star :size="16" :fill="'#ffd700'" color="#ffd700" />
-                    <span>{{ generateMockMovie(movie).rating }}</span>
+                    <span>{{ movie.rating }}</span>
                   </div>
                   <span class="year">{{ movie.Year }}</span>
                 </div>
@@ -276,27 +281,14 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       </div>
     </section>
 
-    <!-- Below loading spinner -->
-    <div v-if="isLoading && page > 1" class="loading">
-      <v-progress-circular indeterminate color="primary" size="50" />
-    </div>
-
-    <!-- LOAD MORE BUTTON -->
-    <div v-if="showLoadMore" class="load-more-container">
-      <v-btn color="primary" size="large" @click="handleLoadMore">
-        Load More
-      </v-btn>
-    </div>
-
     <div ref="sentinel" style="height: 20px; margin-bottom: 40px"></div>
 
-    <!-- MODAL COMPONENT -->
     <MovieDetailModal v-model="showModal" :movie="selectedMovie" />
   </div>
 </template>
 
 <style lang="scss" scoped>
-.home {
+.my-list {
   background: #000;
   color: #fff;
   min-height: 100vh;
@@ -368,10 +360,42 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
   }
 }
 
+.empty-state {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.empty-content {
+  text-align: center;
+  max-width: 500px;
+}
+
+.empty-icon {
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 24px;
+}
+
+.empty-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.empty-desc {
+  font-size: 18px;
+  opacity: 0.7;
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
 .movie-grid {
   margin-top: -40px;
   position: relative;
   z-index: 5;
+  padding-bottom: 60px;
 
   .grid-title {
     font-size: 24px;
@@ -384,7 +408,7 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
     margin-right: 4rem;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 2rem;
+    gap: 18px;
     padding: 0 20px;
   }
 
@@ -494,18 +518,6 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
       background: rgba(239, 68, 68, 0.3);
     }
   }
-}
-
-.loading {
-  text-align: center;
-  margin: 40px 0;
-}
-
-.load-more-container {
-  width: fit-content;
-  margin-top: 4rem;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 @keyframes pulse {
@@ -626,6 +638,10 @@ const handleToggleFavorite = (movieId: string, event: Event) => {
 
   .hero__title {
     font-size: 36px;
+  }
+
+  .empty-title {
+    font-size: 24px;
   }
 }
 </style>

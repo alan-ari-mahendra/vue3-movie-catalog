@@ -1,47 +1,32 @@
-
 import { QueryClient } from '@tanstack/vue-query'
 import type { UseMutationOptions } from '@tanstack/vue-query'
-import { AxiosError } from 'axios'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes
-      retry: (failureCount, error: any) => {
-        if (
-          error instanceof AxiosError &&
-          error.status &&
-          error.status >= 400 &&
-          error.status < 500
-        ) {
-          return false
-        }
-        return failureCount < 3
-      },
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: true
+      staleTime: 5 * 60 * 1000, 
+      gcTime: 10 * 60 * 1000, 
     },
-    mutations: {
-      onError: () => {
-        alert('Sebuah kesalahan terjadi')
-      }
-    }
   }
 })
 
 
+type AsyncFunction<TArgs extends unknown[] = unknown[], TReturn = unknown> = (
+  ...args: TArgs
+) => Promise<TReturn>
 
-export type ApiFnReturnType<FnType extends (...args: any) => Promise<any>> =
+
+export type ApiFnReturnType<FnType extends AsyncFunction> =
   Awaited<ReturnType<FnType>>
 
-export type QueryConfig<T extends (...args: any) => any> = Omit<
+
+export type QueryConfig<T extends (...args: never[]) => unknown> = Omit<
   ReturnType<T>,
   'queryKey' | 'queryFn'
 >
 
 export type MutationConfig<
-  MutationFnType extends (...args: any) => Promise<any>
+  MutationFnType extends AsyncFunction
 > = UseMutationOptions<
   ApiFnReturnType<MutationFnType>,
   Error,

@@ -1,37 +1,33 @@
-import axios, { type AxiosResponse } from 'axios'
+import axios, { type AxiosResponse, AxiosError } from 'axios'
 import { getRestApiUrl } from './config'
 
-const SystemRoutes = {
-  signIn: '/',
-}
+type QueryParamValue = string | number | boolean | null | undefined
+type QueryParams = Record<string, QueryParamValue>
 
-// --- UTILS ---
-export const objectToQueryString = (params: Record<string, any> = {}) => {
-  const esc = encodeURIComponent
-  return Object.keys(params)
-    .map((k) => esc(k) + '=' + esc(params[k]))
-    .join('&')
-}
-
-// --- API ERROR TYPE ---
 interface ApiError {
   code: string
   message: string
   status: number
-  data: Record<string, any>
+  data: Record<string, unknown>
 }
 
-interface OptimisticUpdateParams<T> {
-  updatedFields: T
-  currentFields: T
-  setLocalData: (data: T) => void
+type ApiVariables = Record<string, unknown>
+
+interface ApiErrorResponse {
+  message?: string
+  error?: string
 }
 
-type ApiVariables = Record<string, any>
+export const objectToQueryString = (params: QueryParams = {}) => {
+  const esc = encodeURIComponent
+  return Object.keys(params)
+    .filter((k) => params[k] !== undefined && params[k] !== null)
+    .map((k) => esc(k) + '=' + esc(String(params[k])))
+    .join('&')
+}
 
 const defaults = {
-  baseURL:
-    (getRestApiUrl || 'http://localhost:8000'),
+  baseURL: getRestApiUrl || 'http://localhost:8000',
   error: {
     code: 'INTERNAL_ERROR',
     message:
@@ -74,24 +70,25 @@ const api = async <T>(
       paramsSerializer: objectToQueryString,
     })
     return response.data
-  } catch (error: any) {
-    console.error('🚀 ~ api ~ error:', error?.response)
-    if (axios.isAxiosError(error) && error?.response) {
-      if (error.response.status === 401) {
-        if (typeof window !== 'undefined') localStorage.clear()
-        if (typeof window !== 'undefined')
-          window.location.href = SystemRoutes.signIn
-        throw { message: 'Session expired. Please log in again.' }
-      }
-      if (
-        error?.response?.data?.error &&
-        error?.response?.status !== 503 &&
-        error?.response?.status !== 401
-      ) {
-        throw {
-          message: error?.response?.data?.message,
-          error: error?.response?.data?.error,
-          status: error?.response?.status,
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError<ApiErrorResponse>
+      
+      if (axiosError.response) {
+        if (axiosError.response.status === 401) {
+          throw { message: 'Session expired. Please log in again.' }
+        }
+        
+        if (
+          axiosError.response.data?.error &&
+          axiosError.response.status !== 503 &&
+          axiosError.response.status !== 401
+        ) {
+          throw {
+            message: axiosError.response.data.message,
+            error: axiosError.response.data.error,
+            status: axiosError.response.status,
+          }
         }
       }
     }
@@ -99,7 +96,7 @@ const api = async <T>(
   }
 }
 
-// eslint-disable-next-line import/no-anonymous-default-export
+
 export default {
   get: <T>(
     url: string,
@@ -130,17 +127,4 @@ export default {
     options?: { params?: ApiVariables; contentType?: string },
     baseURL?: string,
   ): Promise<T> => api<T>('delete', url, options, baseURL),
-  optimisticUpdate: async <T extends ApiVariables>(
-    url: string,
-    { updatedFields, currentFields, setLocalData }: OptimisticUpdateParams<T>,
-    baseURL?: string,
-  ): Promise<void> => {
-    try {
-      setLocalData(updatedFields)
-      await api<T>('put', url, { data: updatedFields }, baseURL)
-    } catch (error) {
-      setLocalData(currentFields)
-      console.error((error as ApiError).message)
-    }
-  },
 }
