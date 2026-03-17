@@ -8,18 +8,17 @@ import { VueQueryDevtools } from '@tanstack/vue-query-devtools'
 const route = useRoute()
 const isDev = import.meta.env
 
-// Sembunyikan navbar & footer di halaman donasi (hanya akses via link)
-const showLayout = computed(() => route.name !== 'support-our-dream')
+const showNavAndFooter = computed(() => route.name !== 'support-our-dream')
 </script>
 
 <template>
   <v-app>
-    <AppNavbar v-if="showLayout" />
+    <AppNavbar v-if="showNavAndFooter" />
 
     <v-main>
       <router-view />
       <VueQueryDevtools v-if="isDev" :initial-is-open="false" />
-      <AppFooter v-if="showLayout" />
+      <AppFooter v-if="showNavAndFooter" />
     </v-main>
   </v-app>
 </template>
