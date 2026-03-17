@@ -115,7 +115,7 @@ const closeModal = () => {
               :key="actor"
               class="cast-name"
             >
-              {{ actor }}<span v-if="index < movie.cast.length - 1">, </span>
+              {{ actor }}<span v-if="Number(index) < movie.cast.length - 1">, </span>
             </span>
           </div>
         </div>
